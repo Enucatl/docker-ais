@@ -1,0 +1,55 @@
+services:
+  db:
+    extends:
+      file: /opt/docker/compose-security-baseline/hardening.yml
+      service: postgres
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: ais
+      POSTGRES_USER: ais
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - ais_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ais -d ais"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    extends:
+      file: /opt/docker/compose-security-baseline/hardening.yml
+      service: hardened-medium
+    build: .
+    user: "10001:10001"
+    environment:
+      HISTORY_SAMPLE_SECONDS: 10
+      OPENWATERS_ENABLED: "false"
+      VESSELS_CONFIG_PATH: /app/config/vessels.json
+    secrets: [aisstream_api_key, postgres_password]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["127.0.0.1:8000:8000"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  ais_postgres_data:
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  aisstream_api_key:
+    file: ./secrets/aisstream_api_key
