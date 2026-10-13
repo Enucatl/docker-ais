@@ -1,0 +1,21 @@
+apiVersion: 1
+datasources:
+  - name: AIS PostgreSQL
+    uid: ais-postgres
+    type: postgres
+    access: proxy
+    url: ais-postgres:5432
+    user: ais_grafana
+    editable: false
+    version: 1
+    jsonData:
+      database: ais
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      timeInterval: 10s
+    secureJsonData:
+      password: @PASSWORD@

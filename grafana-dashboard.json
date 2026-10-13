@@ -1,0 +1,290 @@
+{
+  "uid": "ais-resilient-lady",
+  "title": "AIS — Resilient Lady",
+  "description": "Resilient Lady (MMSI 311001056): PostgreSQL sampled position history, with a 10-second minimum sampling interval. Timestamps are UTC reception times.",
+  "tags": [
+    "ais",
+    "Resilient Lady"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-48h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Time between stored updates",
+      "type": "histogram",
+      "datasource": {
+        "type": "postgres",
+        "uid": "ais-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ais-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "rawSql": "WITH updates AS (\n  SELECT received_at,\n         lag(received_at) OVER (ORDER BY received_at, source_hash) AS previous_at\n  FROM public.position_reports\n  WHERE mmsi = '311001056' AND $__timeFilter(received_at)\n)\nSELECT extract(epoch FROM received_at - previous_at)::double precision AS \"Interval (seconds)\"\nFROM updates\nWHERE previous_at IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "bucketCount": 30,
+        "bucketOffset": 0,
+        "combine": false,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "Reception-time intervals between consecutive stored positions inside the selected time range. History is sampled at most once every 10 seconds; this is not a histogram of every received AIS message. The first position has no interval."
+    },
+    {
+      "id": 2,
+      "title": "Ground distance between stored updates",
+      "type": "histogram",
+      "datasource": {
+        "type": "postgres",
+        "uid": "ais-postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ais-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "rawSql": "WITH updates AS (\n  SELECT position,\n         lag(position) OVER (ORDER BY received_at, source_hash) AS previous_position\n  FROM public.position_reports\n  WHERE mmsi = '311001056' AND $__timeFilter(received_at)\n)\nSELECT ST_Distance(position::geography, previous_position::geography) AS \"Distance (metres)\"\nFROM updates\nWHERE previous_position IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthm",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "bucketCount": 30,
+        "bucketOffset": 0,
+        "combine": false,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "Geodesic distance in metres between consecutive stored positions inside the selected time range, calculated by PostGIS on the WGS84 spheroid. Includes zero movement and gaps in reception; this is displacement, not distance travelled along a route."
+    },
+    {
+      "id": 3,
+      "title": "Stored updates per hour (UTC)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "ais-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ais-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "rawSql": "WITH hours AS (\n  SELECT generate_series(\n    date_trunc('hour', $__timeFrom()::timestamptz),\n    date_trunc('hour', $__timeTo()::timestamptz),\n    interval '1 hour'\n  ) AS hour\n), counts AS (\n  SELECT date_trunc('hour', received_at) AS hour, count(*) AS updates\n  FROM public.position_reports\n  WHERE mmsi = '311001056' AND $__timeFilter(received_at)\n  GROUP BY 1\n)\nSELECT hours.hour AS \"time\", coalesce(counts.updates, 0)::double precision AS \"Stored updates\"\nFROM hours\nLEFT JOIN counts USING (hour)\nORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "points",
+            "showPoints": "always",
+            "pointSize": 5,
+            "lineWidth": 0,
+            "fillOpacity": 0,
+            "axisLabel": "Updates per hour"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "One point per UTC hour, including hours with zero stored updates. First and last hours may be partial because counts follow the selected time range. Counts describe sampled history, not all incoming AIS messages."
+    },
+    {
+      "id": 4,
+      "title": "Resilient Lady positions",
+      "type": "geomap",
+      "datasource": {
+        "type": "postgres",
+        "uid": "ais-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "ais-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "rawSql": "SELECT received_at AS \"time\", latitude, longitude,\n       speed_over_ground_knots AS speed_knots\nFROM public.position_reports\nWHERE mmsi = '311001056' AND $__timeFilter(received_at)\nORDER BY received_at, source_hash",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "basemap": {
+          "type": "osm-standard",
+          "name": "OpenStreetMap",
+          "config": {}
+        },
+        "view": {
+          "id": "fit",
+          "allLayers": true,
+          "padding": 0.1,
+          "maxZoom": 14
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showScale": true
+        },
+        "tooltip": {
+          "mode": "details"
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Stored AIS positions",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": true,
+            "config": {
+              "showLegend": false,
+              "style": {
+                "size": {
+                  "fixed": 3,
+                  "min": 2,
+                  "max": 15
+                },
+                "color": {
+                  "fixed": "blue"
+                },
+                "opacity": 0.6,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "description": "Every stored position in the selected time range, without truncation. Hover for reception time, coordinates, and speed in knots. OpenStreetMap tiles require browser internet access."
+    }
+  ]
+}

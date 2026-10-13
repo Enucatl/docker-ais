@@ -11,6 +11,7 @@ class Settings(UpstreamSettings):
 
     model_config = SettingsConfigDict(secrets_dir="/run/secrets")
     postgres_password: str
+    vesselapi_api_key: str = ""
 
     @model_validator(mode="after")
     def configure_database(self) -> "Settings":

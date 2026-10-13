@@ -1,3 +1,5 @@
 .env
 /secrets/aisstream_api_key
+/secrets/vesselapi_api_key
 /secrets/postgres_password
+/secrets/grafana-datasource.yaml

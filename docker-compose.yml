@@ -1,5 +1,5 @@
 services:
-  db:
+  ais-postgres:
     extends:
       file: /opt/docker/compose-security-baseline/hardening.yml
       service: postgres
@@ -11,6 +11,10 @@ services:
     secrets: [postgres_password]
     volumes:
       - ais_postgres_data:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases: [db]
+      grafana: {}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ais -d ais"]
       interval: 10s
@@ -23,13 +27,14 @@ services:
       service: hardened-medium
     build: .
     user: "10001:10001"
+    stop_grace_period: 60s
     environment:
       HISTORY_SAMPLE_SECONDS: 10
       OPENWATERS_ENABLED: "false"
       VESSELS_CONFIG_PATH: /app/config/vessels.json
-    secrets: [aisstream_api_key, postgres_password]
+    secrets: [aisstream_api_key, vesselapi_api_key, postgres_password]
     depends_on:
-      db:
+      ais-postgres:
         condition: service_healthy
     ports: ["127.0.0.1:8000:8000"]
     tmpfs:
@@ -48,8 +53,15 @@ services:
 volumes:
   ais_postgres_data:
 
+networks:
+  grafana:
+    name: ais_grafana
+    internal: true
+
 secrets:
   postgres_password:
     file: ./secrets/postgres_password
   aisstream_api_key:
     file: ./secrets/aisstream_api_key
+  vesselapi_api_key:
+    file: ./secrets/vesselapi_api_key

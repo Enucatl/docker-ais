@@ -1,9 +1,5 @@
 {
   "vessels": [
-    {"mmsi": "311001056", "personal_label": "Resilient Lady"},
-    {"mmsi": "244830547", "personal_label": "Koningsdam"},
-    {"mmsi": "311020700", "personal_label": "Allure of the Seas"},
-    {"mmsi": "311000983", "personal_label": "Valiant Lady"},
-    {"mmsi": "538003668", "personal_label": "Marina"}
+    {"mmsi": "311001056", "personal_label": "Resilient Lady"}
   ]
 }

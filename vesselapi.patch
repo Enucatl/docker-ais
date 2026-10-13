@@ -1,0 +1,88 @@
+--- a/backend/app/aisstream/client.py
++++ b/backend/app/aisstream/client.py
+@@ -50,6 +50,7 @@
+         self.writer = writer
+         self.ingestor = ingestor
+         self.status = StreamStatus()
++        self.last_position_at: dict[str, datetime] = {}
+         self._stop = asyncio.Event()
+         self._refresh = asyncio.Event()
+         self._active_mmsis: set[str] = set()
+@@ -166,6 +167,7 @@
+         if position is not None:
+             if position.mmsi not in self._active_mmsis:
+                 return
++            self.last_position_at[position.mmsi] = received_at
+             result = await self.ingestor.submit(position)
+             if result.accepted:
+                 self.status.live_positions += 1
+--- a/backend/app/persistence/database.py
++++ b/backend/app/persistence/database.py
+@@ -186,9 +186,11 @@
+         )
+         return result.endswith("1")
+
+-    async def latest_position_times(self) -> dict[str, datetime]:
++    async def latest_position_times(self, provider: str | None = None) -> dict[str, datetime]:
+         rows = await self._pool().fetch(
+-            "SELECT mmsi, max(received_at) AS received_at FROM position_reports GROUP BY mmsi"
++            "SELECT mmsi, max(received_at) AS received_at FROM position_reports "
++            "WHERE ($1::text IS NULL OR data_provider = $1) GROUP BY mmsi",
++            provider,
+         )
+         return {row["mmsi"]: row["received_at"] for row in rows}
+
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -19,6 +19,7 @@
+ from app.services.broadcaster import Broadcaster
+ from app.services.persistence_writer import PersistenceWriter
+ from app.services.position_ingestor import PositionIngestor
++from app.vesselapi import VesselAPIService
+
+
+ logging.basicConfig(
+@@ -37,6 +38,7 @@
+     ingestor: PositionIngestor
+     ais: AisStreamService
+     openwaters: OpenWatersService
++    vesselapi: VesselAPIService
+
+
+ @asynccontextmanager
+@@ -56,9 +58,11 @@
+     )
+     await ingestor.initialize()
+     ais = AisStreamService(settings, database, writer, ingestor)
++    ais.last_position_at = await database.latest_position_times("aisstream")
+     openwaters = OpenWatersService(settings, database, ingestor)
++    vesselapi = VesselAPIService(settings, database, ingestor, ais)
+     services = Services(
+-        settings, database, writer, broadcaster, ingestor, ais, openwaters
++        settings, database, writer, broadcaster, ingestor, ais, openwaters, vesselapi
+     )
+     app.state.services = services
+
+@@ -67,9 +71,12 @@
+     openwaters_task = asyncio.create_task(
+         openwaters.run(), name="openwaters-client"
+     )
++    vesselapi_task = asyncio.create_task(vesselapi.run(), name="vesselapi-client")
+     try:
+         yield
+     finally:
++        vesselapi.stop()
++        await vesselapi_task
+         ais.stop()
+         openwaters.stop()
+         try:
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -53,6 +53,7 @@
+     return {
+         "stream": services.ais.status.public_dict(),
+         "openwaters": services.openwaters.status.public_dict(),
++        "vesselapi": services.vesselapi.status.public_dict(),
+         "ingestion": services.ingestor.metrics.public_dict(),
+         "writer": {
+             "queued": services.writer.queue.qsize(),

@@ -13,6 +13,8 @@ RUN npm ci \
 
 RUN cp /src/backend/app/config.py /src/backend/app/_upstream_config.py
 COPY src /src
+COPY vesselapi.patch /tmp/vesselapi.patch
+RUN git -C /src apply /tmp/vesselapi.patch
 
 FROM python:3.12-slim AS app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
